@@ -27,18 +27,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun TestsScreen(vm: WifiVM) {
+fun TestsScreen(vm: WifiVM, tvm: ToolsVM) {
     val gw by vm.gateway.collectAsState()
     val ping by vm.pingStats.collectAsState()
     val pingError by vm.pingError.collectAsState()
     val dl by vm.dl.collectAsState()
-    val ul by vm.ul.collectAsState()
 
     var host by remember { mutableStateOf("") }
     var hostManuallyEdited by remember { mutableStateOf(false) }
     var url by remember { mutableStateOf("") }
-    var iperfHost by remember { mutableStateOf("") }
-    var iperfPort by remember { mutableStateOf("5001") }
 
     LaunchedEffect(gw) {
         if (!hostManuallyEdited) host = gw ?: ""
@@ -51,6 +48,9 @@ fun TestsScreen(vm: WifiVM) {
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        IntegratedTestCard(vm, tvm)
+        InternetSpeedCard(tvm)
+
         SectionCard("Ping / latence / jitter") {
             OutlinedTextField(
                 value = host,
@@ -96,55 +96,6 @@ fun TestsScreen(vm: WifiVM) {
             SpeedView(dl)
         }
 
-        SectionCard("Rychlost – odeslání (TCP, HQS server)") {
-            Text(
-                "Na PC spusťte přiložený HQS_test_server.py (výchozí TCP port 5001). " +
-                    "Nejde o implementaci protokolu iperf, použijte náš server. " +
-                    "Výsledek porovnejte s hodnotou vypsanou na PC.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            OutlinedTextField(
-                value = iperfHost,
-                onValueChange = { iperfHost = it },
-                label = { Text("Adresa serveru") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = iperfPort,
-                onValueChange = { iperfPort = it.filter { ch -> ch.isDigit() }.take(5) },
-                label = { Text("Port") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { vm.startUpload(iperfHost, iperfPort.toIntOrNull() ?: 5001, 10) },
-                    enabled = !ul.running && iperfHost.isNotBlank(),
-                ) { Text("Start (10 s)") }
-                OutlinedButton(onClick = { vm.stopSpeed() }, enabled = ul.running) { Text("Stop") }
-            }
-            SpeedView(ul)
-        }
-    }
-}
-
-@Composable
-private fun SpeedView(s: SpeedState) {
-    if (s.error != null) {
-        Text("Chyba: ${s.error}", color = MaterialTheme.colorScheme.error)
-        return
-    }
-    if (s.running || s.done) {
-        Text(
-            (if (s.done) "Výsledek: " else "Probíhá: ") + fmt1(s.mbps) + " Mbit/s" +
-                " · " + fmt1(s.bytes / 1_048_576.0) + " MB za " + fmt1(s.seconds) + " s",
-        )
-        val top = ((s.samples.maxOrNull() ?: 10.0) * 1.2).toFloat().coerceAtLeast(5f)
-        Spark(
-            s.samples.map { it.toFloat() }, 0f, top, MaterialTheme.colorScheme.primary,
-            Modifier.fillMaxWidth().height(70.dp).padding(top = 8.dp),
-        )
+        IperfCard(tvm)
     }
 }

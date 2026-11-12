@@ -2,6 +2,14 @@ package cz.hqsnet.wifinavi
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
@@ -77,5 +85,67 @@ fun Spark(
             }
         }
         drawPath(path, color, style = Stroke(width = 3f))
+    }
+}
+
+/** Hodnota z textoveho pole (carka i tecka jako desetinny oddelovac). */
+fun String.num(): Double? = replace(',', '.').toDoubleOrNull()
+
+@Composable
+fun NumField(
+    label: String,
+    value: String,
+    onChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    decimal: Boolean = false,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { v ->
+            onChange(v.filter { ch -> ch.isDigit() || (decimal && (ch == '.' || ch == ',')) }.take(9))
+        },
+        label = { Text(label) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = if (decimal) KeyboardType.Decimal else KeyboardType.Number,
+        ),
+        modifier = modifier,
+    )
+}
+
+/** Rada tlacitek pro vyber jedne moznosti. */
+@Composable
+fun ChoiceRow(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        options.forEachIndexed { i, o ->
+            if (i == selected) Button(onClick = { onSelect(i) }) { Text(o) }
+            else OutlinedButton(onClick = { onSelect(i) }) { Text(o) }
+        }
+    }
+}
+
+@Composable
+fun SpeedView(s: SpeedState) {
+    if (s.error != null) {
+        Text("Chyba: ${s.error}", color = MaterialTheme.colorScheme.error)
+        return
+    }
+    if (s.running || s.done) {
+        Text(
+            (if (s.done) "Výsledek: " else "Probíhá: ") + fmt1(s.mbps) + " Mbit/s" +
+                " · " + fmt1(s.bytes / 1_048_576.0) + " MB za " + fmt1(s.seconds) + " s",
+        )
+        if (s.done && s.samples.size > 2) {
+            Text(
+                "Kolísání propustnosti (směr. odchylka vzorků po 0,5 s): ±" +
+                    fmt1(NetCalc.stdDev(s.samples)) + " Mbit/s · max " + fmt1(s.samples.max()) + " Mbit/s",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        val top = ((s.samples.maxOrNull() ?: 10.0) * 1.2).toFloat().coerceAtLeast(5f)
+        Spark(
+            s.samples.map { it.toFloat() }, 0f, top, MaterialTheme.colorScheme.primary,
+            Modifier.fillMaxWidth().height(70.dp).padding(top = 8.dp),
+        )
     }
 }

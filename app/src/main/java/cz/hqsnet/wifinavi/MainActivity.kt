@@ -73,7 +73,7 @@ private fun locationEnabled(ctx: Context): Boolean {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Root(vm: WifiVM = viewModel()) {
+fun Root(vm: WifiVM = viewModel(), tvm: ToolsVM = viewModel()) {
     val ctx = LocalContext.current
     var granted by remember { mutableStateOf(hasLocationPermission(ctx)) }
     var locOn by remember { mutableStateOf(locationEnabled(ctx)) }
@@ -116,6 +116,7 @@ fun Root(vm: WifiVM = viewModel()) {
         "🚶" to "Chůze",
         "🔀" to "Roaming",
         "⚡" to "Testy",
+        "🧰" to "Nástroje",
     )
 
     Scaffold(
@@ -158,7 +159,8 @@ fun Root(vm: WifiVM = viewModel()) {
                 1 -> ChannelsScreen(vm)
                 2 -> WalkScreen(vm)
                 3 -> RoamScreen(vm)
-                else -> TestsScreen(vm)
+                4 -> TestsScreen(vm, tvm)
+                else -> ToolsScreen(vm, tvm)
             }
         }
     }

@@ -105,3 +105,71 @@ fun securityOf(c: String): String = when {
 
 fun validBssid(b: String?): Boolean =
     !b.isNullOrBlank() && b != "02:00:00:00:00:00" && b != "00:00:00:00:00:00"
+
+// ---------------------------------------------------------------------
+// v1.2.0: nastroje (traceroute, skenery, integrovany test, ...)
+// ---------------------------------------------------------------------
+
+/** Vzorek pingu na branu behem roaming testu (rttMs == null = ztrata). */
+data class RoamPingSample(val ts: Long, val rttMs: Double?)
+
+/** Souhrn pingu v okoli jednoho prechodu mezi AP. */
+data class RoamWindow(val sent: Int, val lost: Int, val avgMs: Double, val maxMs: Double) {
+    val lossPct: Double get() = if (sent == 0) 0.0 else lost * 100.0 / sent
+}
+
+enum class TestLevel { OK, WARN, FAIL, INFO }
+
+data class TestStep(val name: String, val level: TestLevel, val detail: String)
+
+data class IntegratedState(
+    val running: Boolean = false,
+    val stage: String = "",
+    val steps: List<TestStep> = emptyList(),
+    val done: Boolean = false,
+    val error: String? = null,
+)
+
+data class TextState(val busy: Boolean = false, val text: String = "", val error: Boolean = false)
+
+data class TraceHop(val ttl: Int, val addr: String?, val ms: Double?, val reached: Boolean)
+
+data class TraceState(
+    val running: Boolean = false,
+    val target: String = "",
+    val hops: List<TraceHop> = emptyList(),
+    val error: String? = null,
+)
+
+data class HostInfo(
+    val ip: String,
+    val ms: Double?,
+    val ports: List<Int>,
+    val name: String? = null,
+    val mac: String? = null,
+)
+
+data class IpScanState(
+    val running: Boolean = false,
+    val range: String = "",
+    val progress: Int = 0,
+    val total: Int = 0,
+    val hosts: List<HostInfo> = emptyList(),
+    val error: String? = null,
+    val done: Boolean = false,
+)
+
+data class PortScanState(
+    val running: Boolean = false,
+    val target: String = "",
+    val progress: Int = 0,
+    val total: Int = 0,
+    val open: List<Int> = emptyList(),
+    val error: String? = null,
+    val done: Boolean = false,
+)
+
+/** Vysledek analyzy rusivych AP kolem pripojene site. */
+data class Interference(val overlapping: Int, val strongest: Int?, val sameSsid: Int)
+
+data class PoeClass(val cls: Int, val standard: String, val pseW: Double, val pdW: Double)

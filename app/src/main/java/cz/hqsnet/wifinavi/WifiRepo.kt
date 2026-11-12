@@ -10,6 +10,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import androidx.core.content.ContextCompat
+import java.net.Inet4Address
 
 /** Tenka obalka nad WifiManagerem. */
 class WifiRepo(context: Context) {
@@ -30,6 +31,20 @@ class WifiRepo(context: Context) {
                 false
             }
         }
+
+    /** IPv4 adresa telefonu a delka prefixu aktivni site, nebo null. */
+    fun localIpv4(): Pair<String, Int>? {
+        return try {
+            val cm = app.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val net = cm.activeNetwork ?: return null
+            val lp = cm.getLinkProperties(net) ?: return null
+            val la = lp.linkAddresses.firstOrNull { it.address is Inet4Address } ?: return null
+            val ip = la.address.hostAddress ?: return null
+            ip to la.prefixLength
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     @SuppressLint("MissingPermission")
     @Suppress("DEPRECATION")

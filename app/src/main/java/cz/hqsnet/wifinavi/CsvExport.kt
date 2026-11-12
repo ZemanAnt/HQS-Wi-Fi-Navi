@@ -41,14 +41,18 @@ object CsvExport {
         }
     }
 
-    fun roaming(events: List<RoamEvent>): String = buildString {
+    fun roaming(events: List<RoamEvent>, pings: List<RoamPingSample> = emptyList()): String = buildString {
         append('\uFEFF')
         append(row("cas", "bssid_z", "bssid_na", "rssi_z_dBm", "rssi_na_dBm",
-            "frekvence_z_MHz", "frekvence_na_MHz", "pozorovane_preruseni_ms"))
+            "frekvence_z_MHz", "frekvence_na_MHz", "pozorovane_preruseni_ms",
+            "ping_okoli_odeslano", "ping_okoli_ztraceno", "ping_okoli_max_ms"))
         events.forEach { e ->
+            val w = if (pings.isEmpty()) null else NetCalc.roamWindow(pings, e.ts)
             append(row(datetime(e.ts), e.fromBssid, e.toBssid,
                 e.fromRssi.toString(), e.toRssi.toString(), e.fromFreq.toString(),
-                e.toFreq.toString(), if (e.gapMs > 0) e.gapMs.toString() else ""))
+                e.toFreq.toString(), if (e.gapMs > 0) e.gapMs.toString() else "",
+                w?.sent?.toString() ?: "", w?.lost?.toString() ?: "",
+                if (w != null && w.sent > w.lost) "%.1f".format(Locale.US, w.maxMs) else ""))
         }
     }
 }

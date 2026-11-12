@@ -17,8 +17,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.net.HttpURLConnection
-import java.net.InetSocketAddress
-import java.net.Socket
 import java.net.URL
 import kotlin.math.abs
 import kotlin.math.max
@@ -53,7 +51,7 @@ class WifiVM(app: Application) : AndroidViewModel(app) {
     val pingStats = MutableStateFlow(PingStats())
     val pingError = MutableStateFlow<String?>(null)
     val dl = MutableStateFlow(SpeedState())
-    val ul = MutableStateFlow(SpeedState())
+    val roamPing = MutableStateFlow<List<RoamPingSample>>(emptyList())
 
     init {
         val session = surveyStore.load()
@@ -69,7 +67,8 @@ class WifiVM(app: Application) : AndroidViewModel(app) {
     private var receiver: BroadcastReceiver? = null
     private var pingJob: Job? = null
     private var dlJob: Job? = null
-    private var ulJob: Job? = null
+    private var roamPingJob: Job? = null
+    private var roamGw: String? = null
     private var previousBssid: String? = null
 
     // ------------------------------------------------------------------
@@ -230,7 +229,7 @@ class WifiVM(app: Application) : AndroidViewModel(app) {
     }
 
     fun exportRoamCsv(uri: Uri) {
-        writeCsv(uri, CsvExport.roaming(roamEvents.value))
+        writeCsv(uri, CsvExport.roaming(roamEvents.value, roamPing.value))
     }
 
     private fun writeCsv(uri: Uri, content: String) {
@@ -264,11 +263,32 @@ class WifiVM(app: Application) : AndroidViewModel(app) {
         lastRssi = c?.rssi ?: 0
         lastFreq = c?.freq ?: 0
         lostAt = 0L
+        roamPing.value = emptyList()
+        roamGw = gateway.value
         roamRunning.value = true
+        startRoamPing()
     }
 
     fun stopRoam() {
         roamRunning.value = false
+        roamPingJob?.cancel()
+    }
+
+    /** Behem roamingu pingá bránu (~5x/s); ztráta = null. Slouží k odhadu ztrát a latence kolem přechodu. */
+    private fun startRoamPing() {
+        roamPingJob?.cancel()
+        roamPingJob = viewModelScope.launch(Dispatchers.IO) {
+            while (isActive && roamRunning.value) {
+                val t0 = System.currentTimeMillis()
+                gateway.value?.let { roamGw = it }
+                val gw = roamGw
+                if (gw != null) {
+                    val rtt = NetTools.pingOnce(gw)
+                    roamPing.value = (roamPing.value + RoamPingSample(t0, rtt)).takeLast(3000)
+                }
+                delay(max(0L, 200L - (System.currentTimeMillis() - t0)))
+            }
+        }
     }
 
     private fun trackRoam(c: Conn?, now: Long) {
@@ -359,24 +379,10 @@ class WifiVM(app: Application) : AndroidViewModel(app) {
         pingJob?.cancel()
     }
 
-    private fun pingOnce(host: String): Double? {
-        var p: Process? = null
-        return try {
-            p = ProcessBuilder("/system/bin/ping", "-c", "1", "-W", "1", host)
-                .redirectErrorStream(true)
-                .start()
-            val out = p.inputStream.bufferedReader().readText()
-            p.waitFor()
-            Regex("time=([0-9.]+)").find(out)?.groupValues?.get(1)?.toDouble()
-        } catch (e: Exception) {
-            null
-        } finally {
-            p?.destroy()
-        }
-    }
+    private fun pingOnce(host: String): Double? = NetTools.pingOnce(host)
 
     // ------------------------------------------------------------------
-    // Test rychlosti: HTTP download a TCP upload (kompatibilni s iperf2 -s)
+    // Test rychlosti: HTTP download (TCP upload / iPerf je v ToolsVM)
     // ------------------------------------------------------------------
     fun startDownload(url: String, maxSec: Int) {
         if (!repo.isWifiNetworkActive) {
@@ -411,44 +417,8 @@ class WifiVM(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun startUpload(host: String, port: Int, maxSec: Int) {
-        if (!repo.isWifiNetworkActive) {
-            ul.value = SpeedState(error = "Test vyžaduje aktivní připojení přes Wi-Fi.")
-            return
-        }
-        if (port !in 1..65535) {
-            ul.value = SpeedState(error = "Port musí být v rozsahu 1–65535.")
-            return
-        }
-        val h = host.trim()
-        if (h.isEmpty()) {
-            ul.value = SpeedState(error = "Zadejte adresu serveru")
-            return
-        }
-        ulJob?.cancel()
-        ulJob = viewModelScope.launch(Dispatchers.IO) {
-            ul.value = SpeedState(running = true)
-            try {
-                Socket().use { s ->
-                    s.connect(InetSocketAddress(h, port), 5000)
-                    val out = s.getOutputStream()
-                    val buf = ByteArray(128 * 1024)
-                    runMeter(ul, maxSec) {
-                        out.write(buf)
-                        buf.size
-                    }
-                    out.flush()
-                }
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                ul.value = SpeedState(error = e.message ?: e.javaClass.simpleName)
-            }
-        }
-    }
-
     fun stopSpeed() {
         dlJob?.cancel()
-        ulJob?.cancel()
     }
 
     /** Spolecna smycka mereni; step() vraci pocet preslanych bajtu nebo -1 pri konci. */

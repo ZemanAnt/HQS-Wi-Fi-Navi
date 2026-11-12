@@ -31,6 +31,7 @@ fun RoamScreen(vm: WifiVM) {
     val running by vm.roamRunning.collectAsState()
     val events by vm.roamEvents.collectAsState()
     val rssi by vm.roamRssi.collectAsState()
+    val pings by vm.roamPing.collectAsState()
     val conn by vm.conn.collectAsState()
     val exportStatus by vm.exportStatus.collectAsState()
     val export = rememberLauncherForActivityResult(
@@ -57,7 +58,7 @@ fun RoamScreen(vm: WifiVM) {
                 Text(
                     "Spusťte test a projděte areálem mezi dosahy dvou AP (tam i zpět). " +
                         "Aplikace zaznamenává každou změnu BSSID při stejném SSID " +
-                        "(vzorkování ≈ 300 ms, přerušení je tedy orientační).",
+                        "(vzorkování ≈ 300 ms, přerušení je tedy orientační). Zároveň pinguje bránu (~5×/s) a hlásí ztráty a latenci kolem každého přechodu.",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Row(
@@ -102,6 +103,13 @@ fun RoamScreen(vm: WifiVM) {
                         "Přerušení při přechodu: průměr ${gaps.average().toLong()} ms · max ${gaps.max()} ms"
                     },
                 )
+                if (pings.isNotEmpty()) {
+                    val all = NetCalc.windowOf(pings)
+                    Text(
+                        "Ping na bránu během testu: ${all.sent} vzorků · ztráty ${fmt1(all.lossPct)} % · " +
+                            "latence ø ${fmt1(all.avgMs)} ms / max ${fmt1(all.maxMs)} ms",
+                    )
+                }
                 Text("Ping-pong přechody (zpět do 10 s): $pingPong")
                 if (pingPong > 0) {
                     Text(
@@ -120,6 +128,14 @@ fun RoamScreen(vm: WifiVM) {
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(e.fromBssid + " → " + e.toBssid, style = MaterialTheme.typography.bodySmall)
+                    if (pings.isNotEmpty()) {
+                        val w = NetCalc.roamWindow(pings, e.ts)
+                        Text(
+                            "Ping v okolí přechodu (−1…+3 s): ztraceno ${w.lost}/${w.sent}" +
+                                if (w.sent > w.lost) " · latence ø ${fmt1(w.avgMs)} / max ${fmt1(w.maxMs)} ms" else "",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                     Text(
                         "${e.fromRssi} → ${e.toRssi} dBm · přerušení " +
                             if (e.gapMs > 0) "≈ ${e.gapMs} ms" else "nezaznamenáno",

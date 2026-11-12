@@ -44,8 +44,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Verify Android SDK on GitHub runner
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          command -v sdkmanager
 
       - name: Set up Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
@@ -53,7 +56,9 @@ jobs:
           gradle-version: '8.7'
 
       - name: Install Android SDK 34
-        run: sdkmanager 'platforms;android-34' 'build-tools;34.0.0'
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-34' 'build-tools;34.0.0'
 
       - name: Regenerate Gradle wrapper
         run: gradle wrapper --gradle-version 8.7 --distribution-type bin
